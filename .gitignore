@@ -2,4 +2,5 @@ compile_commands.json
 ft_traceroute
 obj
 .cache
+.clang-format
 
