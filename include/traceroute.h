@@ -1,12 +1,11 @@
 #pragma once
 
+#include <stddef.h>
 #include <stdint.h>
+#include <sys/types.h>
 
-#define UNINISIALIZE -42
-#define PACKET_DEFAULT_SIZE 60
-#define IP_HEADER_SIZE_DEFAULT 20
+#define IP_HEADER_SIZE_DEFAULT sizeof(struct iphdr)
 
-// recv
 #define RECV 0
 #define NO_RECV 1
 
@@ -15,9 +14,17 @@
 #define ERR_NONE -3
 
 typedef struct {
-  uint32_t hops;
-  uint32_t pkt_size;
+  size_t hops_min;
+  size_t hops_max;
+  size_t pkt_size;
+  size_t queries_by_hops;
+  size_t sim_queries;
+
 } trac_opt;
+
 typedef int socket_t;
 
 extern trac_opt opt;
+extern uint8_t run;
+extern socket_t udp_sock;
+extern socket_t icmp_sock;
