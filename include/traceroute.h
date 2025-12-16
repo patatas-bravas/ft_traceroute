@@ -1,5 +1,7 @@
 #pragma once
 
+#include <bits/types/struct_timeval.h>
+#include <netinet/in.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/types.h>
@@ -21,6 +23,15 @@ typedef struct {
   size_t sim_queries;
 
 } trac_opt;
+
+typedef struct {
+  uint16_t port;
+  struct timeval start;
+  struct timeval end;
+  struct in_addr addr;
+  uint8_t receveid;
+
+} queries_info;
 
 typedef int socket_t;
 
