@@ -1,21 +1,28 @@
 #pragma once
 
-#include <bits/types/struct_timeval.h>
 #include <netinet/in.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <sys/types.h>
 
+//UTILS
 #define IP_HEADER_SIZE_DEFAULT sizeof(struct iphdr)
+#define TOTAL_QUERIES ((opt.hops_max - opt.hops_min + 1) * opt.queries_by_hops)
+#define CURR_QUERIE (curr_port - opt.start_port)
 
-#define RECV 0
-#define NO_RECV 1
-
+//ERROR
 #define ERR_FATAL -1
 #define ERR_WARNING -2
 #define ERR_NONE -3
 
+//STATUS
+#define NO_SEND 0
+#define SEND 1
+#define RECV 2
+#define PRINT 3
+
 typedef struct {
+  size_t start_port;
   size_t hops_min;
   size_t hops_max;
   size_t pkt_size;
@@ -25,17 +32,19 @@ typedef struct {
 } trac_opt;
 
 typedef struct {
+  uint8_t status;
   uint16_t port;
   struct timeval start;
   struct timeval end;
   struct in_addr addr;
-  uint8_t receveid;
+  char ipname[INET_ADDRSTRLEN];
 
 } queries_info;
 
 typedef int socket_t;
 
 extern trac_opt opt;
-extern uint8_t run;
+extern in_port_t curr_port;
+extern uint8_t reached;
 extern socket_t udp_sock;
 extern socket_t icmp_sock;
