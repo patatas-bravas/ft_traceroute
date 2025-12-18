@@ -14,6 +14,7 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 socket_t udp_sock;
@@ -21,6 +22,7 @@ socket_t icmp_sock;
 
 trac_opt opt;
 in_port_t curr_port;
+size_t curr_hops;
 uint8_t reached = 0;
 
 socket_t init_socket() {
@@ -52,30 +54,31 @@ int8_t send_pkt(struct sockaddr_in *dest_addr, queries_info *queries) {
   memset(pkt, 0, opt.pkt_size); // LIBFT
 
   for (size_t i = 0; i < opt.sim_queries; i++) {
-    if ((curr_port - opt.start_port) % opt.queries_by_hops == 0) {
-      if (setsockopt(udp_sock, IPPROTO_IP, IP_TTL, &opt.hops_min, sizeof(opt.hops_min)) == -1) {
+    if (CURR_QUERY % opt.queries_by_hops == 0) {
+      if (setsockopt(udp_sock, IPPROTO_IP, IP_TTL, &curr_hops, sizeof(curr_hops)) == -1) {
         fprintf(stderr, "[ERROR][setsockopt]: %s\n", strerror(errno));
         free(pkt);
         return ERR_FATAL;
       }
-      opt.hops_min++;
+      curr_hops++;
     }
-    queries[i].port = htons(curr_port++);
-    dest_addr->sin_port = queries[i].port;
+    queries[CURR_QUERY].port = htons(curr_port);
+    dest_addr->sin_port = queries[CURR_QUERY].port;
     if (sendto(udp_sock, pkt, opt.pkt_size, 0, (struct sockaddr *)dest_addr, sizeof(struct sockaddr_in)) == -1) {
       fprintf(stderr, "[ERROR][sendto]: %s\n", strerror(errno));
       free(pkt);
       return ERR_FATAL;
     }
-    queries[i].status = SEND;
-    gettimeofday(&queries[i].start, NULL);
+    queries[CURR_QUERY].status = SEND;
+    gettimeofday(&queries[CURR_QUERY].start, NULL);
+    curr_port++;
   }
   free(pkt);
   return 0;
 }
 
-double get_elapsed_time(struct timeval send, struct timeval recv) {
-  return (recv.tv_sec - send.tv_sec) * 1000.0 + (recv.tv_usec - send.tv_usec) / 1000.0;
+double get_elapsed_time(struct timeval start, struct timeval end) {
+  return (end.tv_sec - start.tv_sec) * 1000.0 + (end.tv_usec - start.tv_usec) / 1000.0;
 }
 
 int8_t get_udp_data(const uint8_t *buffer, queries_info *queries, struct in_addr recv_addr) {
@@ -85,12 +88,10 @@ int8_t get_udp_data(const uint8_t *buffer, queries_info *queries, struct in_addr
   struct udphdr *udp = (struct udphdr *)((uint8_t *)ipudp + (ipudp->ihl * sizeof(int32_t)));
 
   in_port_t port = ntohs(udp->dest);
-  printf("port = %d\n", port);
   size_t i = port - opt.start_port;
-  printf("index = %ld\n", i);
   queries[i].addr = recv_addr;
   queries[i].port = port;
-  queries[i].status = RECV;
+  queries[i].status = RECEIVED;
   gettimeofday(&queries[i].end, NULL);
   if (icmp->type == ICMP_ECHOREPLY && i % (opt.queries_by_hops - 1) == 0) {
     reached = 1;
@@ -151,25 +152,31 @@ int8_t dns_resolver(const char *hostname, char *ipname, struct sockaddr_in *addr
 }
 
 int8_t print_queries(queries_info *queries) {
-  for (static size_t i = 0; i < TOTAL_QUERIES; i++) {
-    // if (i % opt.queries_by_hops == 0)
-    // printf("%2ld ", i / opt.queries_by_hops);
-    if (queries[i].status != SEND)
+  static size_t i = 0;
+  while (i < TOTAL_QUERIES) {
+    if (i % opt.queries_by_hops == 0) {
+      printf("%2ld  ", i / opt.queries_by_hops);
+    }
+    if (queries[i].status == NO_SEND)
       return 0;
+
+    if (queries[i].status == SEND) {
+
+      queries[i].start
+    }
+
+    i++;
   }
-  return 0;
 }
 
 int8_t ft_traceroute(struct sockaddr_in *addr_dest) {
-
   queries_info *queries = malloc(sizeof(queries_info) * TOTAL_QUERIES);
   if (queries == NULL) {
     fprintf(stderr, "[ERROR][malloc]: %s\n", strerror(errno));
     return ERR_FATAL;
   }
-  memset(queries, 0, sizeof(queries_info) * TOTAL_QUERIES); // LIBFT
 
-  while (CURR_QUERIE < TOTAL_QUERIES && !reached) {
+  while (CURR_QUERY < TOTAL_QUERIES && !reached) {
     if (send_pkt(addr_dest, queries) == ERR_FATAL) {
       free(queries);
       return ERR_FATAL;
@@ -207,6 +214,7 @@ int main(int argc, char **argv) {
   opt.sim_queries = 16;
   opt.start_port = 33434;
   curr_port = opt.start_port;
+  curr_hops = opt.hops_min;
 
   if (dns_resolver(hostname, ipname, &addr) == ERR_FATAL) {
     close(udp_sock);

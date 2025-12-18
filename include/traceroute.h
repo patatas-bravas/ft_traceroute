@@ -5,21 +5,21 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-//UTILS
+// UTILS
 #define IP_HEADER_SIZE_DEFAULT sizeof(struct iphdr)
 #define TOTAL_QUERIES ((opt.hops_max - opt.hops_min + 1) * opt.queries_by_hops)
-#define CURR_QUERIE (curr_port - opt.start_port)
+#define CURR_QUERY (curr_port - opt.start_port)
 
-//ERROR
+// ERROR
 #define ERR_FATAL -1
 #define ERR_WARNING -2
 #define ERR_NONE -3
 
-//STATUS
+// STATUS
 #define NO_SEND 0
 #define SEND 1
-#define RECV 2
-#define PRINT 3
+#define RECEIVED 2
+#define PRINTED 3
 
 typedef struct {
   size_t start_port;
@@ -45,6 +45,7 @@ typedef int socket_t;
 
 extern trac_opt opt;
 extern in_port_t curr_port;
+extern size_t curr_hops;
 extern uint8_t reached;
 extern socket_t udp_sock;
 extern socket_t icmp_sock;
