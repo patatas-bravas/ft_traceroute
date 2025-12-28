@@ -1,7 +1,7 @@
 NAME = ft_traceroute
-CC = cc 
-CFLAGS = -g -Wall -Wextra -Werror -Wshadow -I$(DIR_INCLUDE) -std=gnu23
-LDFLAGS = -lm 
+CC = gcc 
+CFLAGS = -g3 -Wall -Wextra -Werror -Wshadow -I$(DIR_INCLUDE) -std=gnu23
+LDFLAGS = -lm -g3 
 
 DIR_INCLUDE = include
 
@@ -14,6 +14,8 @@ OBJS = $(addprefix $(DIR_OBJ)/, $(FILE_OBJ))
 
 all: $(NAME)
 
+test: $(NAME)
+	sudo ./$(NAME) www.google.com
 
 $(NAME): $(OBJS)
 	$(CC) $^ $(LDFLAGS) -o $@
@@ -32,4 +34,4 @@ fclean: clean
 
 re: fclean all
 
-.PHONY: all clean fclean re
+.PHONY: all test clean fclean re
