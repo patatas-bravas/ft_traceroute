@@ -1,6 +1,8 @@
 #include "traceroute.h"
 #include <arpa/inet.h>
+#include <bits/getopt_core.h>
 #include <errno.h>
+#include <linux/limits.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
@@ -12,6 +14,7 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <getopt.h>
 #include <unistd.h>
 
 struct options opts;
@@ -27,7 +30,7 @@ static enum error init_socket(int *fd)
 	fd[ICMP] = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if (fd[ICMP] == -1) {
 		if (errno == EPERM)
-			fprintf(stderr, "[WARNING][ft_traceroute]: requires root privileges\n");
+			fprintf(stderr, "ft_traceroute: requires root privileges\n");
 		else
 			fprintf(stderr, "[ERROR][init_socket][socket]: %s\n", strerror(errno));
 		return ERROR;
@@ -45,7 +48,7 @@ static enum error send_datagram(struct sockaddr_in *dest_addr, struct probe *pro
 	uint8_t *dgram;
 	dgram = calloc(opts.dgram_size, sizeof(uint8_t));
 	if (dgram == NULL) {
-		fprintf(stderr, "[ERROR][malloc]: %s\n", strerror(errno));
+		fprintf(stderr, "[ERROR][send_datagram][malloc]: %s\n", strerror(errno));
 		return ERROR;
 	}
 
@@ -53,7 +56,7 @@ static enum error send_datagram(struct sockaddr_in *dest_addr, struct probe *pro
 	while (state->probes_flight < opts.probes_sim && i < TOTAL_PROBES) {
 		if (i % opts.probes_by_hops == 0) {
 			if (setsockopt(fd[UDP], IPPROTO_IP, IP_TTL, &state->hops_curr, sizeof(state->hops_curr)) == -1) {
-				fprintf(stderr, "[ERROR][setsockopt]: %s\n", strerror(errno));
+				fprintf(stderr, "[ERROR][send_datagram][setsockopt]: %s\n", strerror(errno));
 				free(dgram);
 				return ERROR;
 			}
@@ -66,7 +69,7 @@ static enum error send_datagram(struct sockaddr_in *dest_addr, struct probe *pro
 		dest_addr->sin_port = probes[i].port;
 
 		if (sendto(fd[UDP], dgram, opts.dgram_size, 0, (struct sockaddr *)dest_addr, sizeof(struct sockaddr_in)) == -1) {
-			fprintf(stderr, "[ERROR][sendto]: %s\n", strerror(errno));
+			fprintf(stderr, "[ERROR][send_datagram][sendto]: %s\n", strerror(errno));
 			free(dgram);
 			return ERROR;
 		}
@@ -118,7 +121,6 @@ static enum error print_probes(struct probe *probes, const struct trace_state *s
 
 		if (probes[i].addr.s_addr == INADDR_ANY) {
 			printf(" *");
-			fflush(stdout);
 		} else {
 			if (hop_idx == 0 || probes[i].addr.s_addr != probes[i - 1].addr.s_addr) {
 				printf(" %s", inet_ntoa(probes[i].addr));
@@ -147,7 +149,7 @@ static enum error print_probes(struct probe *probes, const struct trace_state *s
 				break;
 			}
 		}
-
+		fflush(stdout);
 		if (hop_idx == opts.probes_by_hops - 1)
 			printf("\n");
 
@@ -169,7 +171,7 @@ static enum error recv_datagram(struct probe *probes, struct trace_state *state,
 	if (state->reached == false) {
 		int nfd = select(fd[ICMP] + 1, &fd_read, NULL, NULL, &timeout);
 		if (nfd == -1) {
-			fprintf(stderr, "[ERROR][select]: %s\n", strerror(errno));
+			fprintf(stderr, "[ERROR][recv_datagram][select]: %s\n", strerror(errno));
 			free(probes);
 			return ERROR;
 		}
@@ -188,7 +190,7 @@ static enum error recv_datagram(struct probe *probes, struct trace_state *state,
 	if (recv_bytes == -1) {
 		if (errno == EWOULDBLOCK || errno == EAGAIN)
 			return 0;
-		fprintf(stderr, "[ERROR][recvfrom]: %s\n", strerror(errno));
+		fprintf(stderr, "[ERROR][recv_datagram][recvfrom]: %s\n", strerror(errno));
 		return ERROR;
 	}
 
@@ -256,7 +258,7 @@ static enum error ft_traceroute(struct sockaddr_in *addr_dest, struct trace_stat
 {
 	struct probe *probes = calloc(TOTAL_PROBES, sizeof(struct probe)); //LIBFT
 	if (probes == NULL) {
-		fprintf(stderr, "[ERROR][calloc]: %s\n", strerror(errno));
+		fprintf(stderr, "[ERROR][ft_traceroute][calloc]: %s\n", strerror(errno));
 		return ERROR;
 	}
 
@@ -286,26 +288,117 @@ static enum error ft_traceroute(struct sockaddr_in *addr_dest, struct trace_stat
 	return ERROR;
 }
 
+static inline void print_options()
+{
+	fprintf(stderr, "Usage: ft_traceroute [ -n ] [ -f first_ttl ] [ -m max_ttl ] [ -N squeries ] [ -p port ] [ -q nqueries ] host [ packetlen ]\n");
+	fprintf(stderr, "  -n                                   Do not resolve IP addresses to their domain names\n");
+	fprintf(stderr, "  -f first_ttl  --first=first_ttl      Start from the first_ttl hop (instead from 1)\n");
+	fprintf(stderr, "  -m max_ttl  --max-hops=max_ttl       Set the max number of hops (max TTL to be reached). Default is 30\n");
+	fprintf(stderr, "  -q nqueries  --queries=nqueries      Set the number of probes per each hop. Default is 3\n");
+	fprintf(stderr, "  -N squeries  --sim-queries=squeries  Set the number of probes to be tried simultaneously (default is 16)\n");
+	fprintf(stderr,
+		"  -p port  --port=port                 Set the destination port to use. It is either initial udp port value for \"default\" method (incremented by each probe, default is 33434)\n");
+}
+
+enum error handle_options(int argc, char **argv, char *hostname)
+{
+	opts.dgram_size = DGRAM_SIZE_DEFAULT;
+	opts.hops_min = HOPS_MIN_DEFAULT;
+	opts.hops_max = HOPS_MAX_DEFAULT;
+	opts.probes_by_hops = PROBES_BY_HOPS_DEFAULT;
+	opts.probes_sim = PROBES_SIM_DEFAULT;
+	opts.port_start = PORT_START_DEFAULT;
+	opts.dns_lookup = true;
+
+	int opt_idx;
+	int opt_curr;
+	char *endptr;
+
+	struct option opt[] = { { "dns_lookup", no_argument, 0, 'n' },	   { "help", no_argument, 0, 'h' },
+				{ "first", required_argument, 0, 'f' },	   { "max-hops", required_argument, 0, 'm' },
+				{ "nqueries", required_argument, 0, 'q' }, { "squeries", required_argument, 0, 'N' },
+				{ "port", required_argument, 0, 'p' },	   { 0, 0, 0, 0 } };
+
+	while ((opt_curr = getopt_long(argc, argv, "nhf:q:p:m:N:", opt, &opt_idx)) != -1) {
+		switch (opt_curr) {
+		case 'n':
+			opts.dns_lookup = false;
+			break;
+		case 'h':
+			print_options();
+			return ERROR;
+		case 'f':
+			opts.hops_min = strtol(optarg, &endptr, 10);
+			if (errno == ERANGE || *endptr || opts.hops_min <= 0 || opts.hops_min >= 255) {
+				fprintf(stderr, "first hop out of range\n");
+				return ERROR;
+			}
+			break;
+		case 'm':
+			opts.hops_max = strtol(optarg, &endptr, 10);
+			if (errno == ERANGE || *endptr || opts.hops_max <= 0 || opts.hops_max > 255) {
+				fprintf(stderr, "max hops cannot be more than 255\n");
+				return ERROR;
+			}
+			break;
+		case 'q':
+			opts.probes_by_hops = strtol(optarg, &endptr, 10);
+			if (errno == ERANGE || *endptr || opts.probes_by_hops <= 0 || opts.probes_by_hops >= 10) {
+				fprintf(stderr, "no more than 10 probes per hop\n");
+				return ERROR;
+			}
+			break;
+		case 'N':
+			opts.probes_sim = strtol(optarg, &endptr, 10);
+			if (errno == ERANGE || *endptr || opts.probes_sim <= 0 || opts.probes_sim > 32) {
+				fprintf(stderr, "no more than 32 probes simultaneously\n");
+				return ERROR;
+			}
+			break;
+		case 'p':
+			opts.port_start = strtol(optarg, &endptr, 10);
+			if (errno == ERANGE || *endptr || opts.port_start <= 0 || opts.port_start > 65535) {
+				fprintf(stderr, "port range is between 1-65535\n");
+				return ERROR;
+			}
+			break;
+		}
+	}
+
+	if (opts.hops_min > opts.hops_max) {
+		fprintf(stderr, "first hop out of range");
+		return ERROR;
+	}
+
+	if (argc - optind > 2) {
+		fprintf(stderr, "Extra arg '%s'\n", argv[optind + 2]);
+		return ERROR;
+	} else if (argc - optind == 2) {
+		hostname = argv[optind++];
+		opts.dgram_size = strtol(argv[optind], &endptr, 10);
+		if (opts.dgram_size) {
+		}
+	} else if (argc - optind == 1) { //LAST MODIFICATION HERE PAS FINI =@
+		hostname = argv[optind];
+	}
+
+	return SUCCESS;
+}
+
 int main(int argc, char **argv)
 {
 	if (argc < 2) {
-		printf("ICI on va print le help!\n");
+		print_options();
 		return 0;
 	}
 
 	int fd[2];
 	if (init_socket(fd) == ERROR)
 		return 1;
+
 	char *hostname = argv[argc - 1];
 	char ipname[INET_ADDRSTRLEN];
 	struct sockaddr_in addr;
-	opts.dgram_size = 40;
-	opts.hops_min = 1;
-	opts.hops_max = 30;
-	opts.probes_by_hops = 3;
-	opts.probes_sim = 16;
-	opts.port_start = 33434;
-
 	if (dns_resolver(hostname, ipname, &addr) == ERROR) {
 		close(fd[UDP]);
 		close(fd[ICMP]);

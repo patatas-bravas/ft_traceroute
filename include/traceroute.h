@@ -2,12 +2,18 @@
 
 #include <netdb.h>
 #include <netinet/in.h>
-#include <stddef.h>
 #include <stdint.h>
 #include <sys/time.h>
 #include <sys/types.h>
 
 #define TOTAL_PROBES ((opts.hops_max - opts.hops_min + 1) * opts.probes_by_hops)
+
+#define DGRAM_SIZE_DEFAULT 40
+#define HOPS_MIN_DEFAULT 1
+#define HOPS_MAX_DEFAULT 30
+#define PROBES_BY_HOPS_DEFAULT 3
+#define PROBES_SIM_DEFAULT 16
+#define PORT_START_DEFAULT 33434
 
 enum status {
 	UNSENT,
@@ -29,12 +35,13 @@ enum error {
 };
 
 struct options {
-	size_t port_start;
-	size_t hops_min;
-	size_t hops_max;
-	size_t dgram_size;
-	size_t probes_by_hops;
-	size_t probes_sim;
+	int64_t port_start;
+	int64_t hops_min;
+	int64_t hops_max;
+	int64_t dgram_size;
+	int64_t probes_by_hops;
+	int64_t probes_sim;
+	bool dns_lookup;
 };
 
 struct probe {
@@ -45,7 +52,7 @@ struct probe {
 	struct in_addr addr;
 	uint8_t type;
 	uint8_t code;
-	double elapsed_time;
+	int64_t elapsed_time;
 };
 
 struct trace_state {
@@ -56,7 +63,5 @@ struct trace_state {
 	bool reached;
 	size_t end;
 };
-
-typedef int socket_t;
 
 extern struct options opts;
