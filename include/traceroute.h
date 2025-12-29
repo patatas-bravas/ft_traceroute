@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <stdbool.h>
 
 #define TOTAL_PROBES ((opts.hops_max - opts.hops_min + 1) * opts.probes_by_hops)
 
@@ -35,12 +36,12 @@ enum error {
 };
 
 struct options {
-	int64_t port_start;
-	int64_t hops_min;
-	int64_t hops_max;
-	int64_t dgram_size;
-	int64_t probes_by_hops;
-	int64_t probes_sim;
+	size_t port_start;
+	size_t hops_min;
+	size_t hops_max;
+	size_t dgram_size;
+	size_t probes_by_hops;
+	size_t probes_sim;
 	bool dns_lookup;
 };
 
@@ -52,14 +53,13 @@ struct probe {
 	struct in_addr addr;
 	uint8_t type;
 	uint8_t code;
-	int64_t elapsed_time;
+	double elapsed_time;
 };
 
 struct trace_state {
 	in_port_t port_curr;
-	in_port_t port_reach;
 	uint8_t hops_curr;
-	int64_t probes_flight;
+	size_t probes_flight;
 	bool reached;
 	size_t end;
 };
