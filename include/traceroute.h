@@ -8,7 +8,7 @@
 
 #define TOTAL_PROBES ((opts.hops_max - opts.hops_min + 1) * opts.probes_by_hops)
 
-#define DGRAM_SIZE_DEFAULT 40
+#define DGRAM_SIZE_DEFAULT 60
 #define HOPS_MIN_DEFAULT 1
 #define HOPS_MAX_DEFAULT 30
 #define PROBES_BY_HOPS_DEFAULT 3
@@ -59,7 +59,7 @@ struct trace_state {
 	in_port_t port_curr;
 	in_port_t port_reach;
 	uint8_t hops_curr;
-	size_t probes_flight;
+	int64_t probes_flight;
 	bool reached;
 	size_t end;
 };
