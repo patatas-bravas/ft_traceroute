@@ -17,6 +17,11 @@
 #define PROBES_SIM_DEFAULT 16
 #define PORT_START_DEFAULT 33434
 
+#define OPT_MAX_PKT_SIZE 65000
+#define OPT_MIN_PKT_SIZE 28
+#define OPT_MAX_PROBES_HOP 10
+
+
 enum status {
 	UNSENT,
 	SENT,
@@ -61,8 +66,7 @@ struct trace_state {
 	in_port_t port_curr;
 	uint8_t hops_curr;
 	size_t probes_flight;
-	bool reached;
-	size_t end;
+	size_t end_idx;
 };
 
 extern struct options opts;
