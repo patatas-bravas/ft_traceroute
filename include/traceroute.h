@@ -8,6 +8,7 @@
 #include <stdbool.h>
 
 #define TOTAL_PROBES ((opts.hops_max - opts.hops_min + 1) * opts.probes_by_hops)
+#define HEADERS_SIZE (sizeof(struct iphdr) * 2 + sizeof(struct icmphdr) * 2)
 
 #define DGRAM_SIZE_DEFAULT 60
 #define HOPS_MIN_DEFAULT 1

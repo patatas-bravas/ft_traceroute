@@ -1,7 +1,7 @@
 NAME = ft_traceroute
 CC = gcc 
 CFLAGS = -g3 -Wall -Wextra -Werror -Wshadow -I$(DIR_INCLUDE)
-LDFLAGS = -lm -g3 
+LDFLAGS = -g3 
 
 DIR_INCLUDE = include
 
