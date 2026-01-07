@@ -23,26 +23,26 @@
 
 #define MAX_TIMEOUT 200.0
 
-enum status {
+typedef enum {
 	UNSENT,
 	SENT,
 	RECEIVED,
 	PRINTABLE,
-};
+} Status;
 
-enum socket {
+typedef enum {
 	UDP,
 	ICMP,
-};
+} Socket;
 
-enum error {
+typedef enum {
 	SUCCESS = 0,
 	IGNORE = -1,
 	WARNING = -2,
 	ERROR = -3,
-};
+} ErrorType;
 
-struct options {
+typedef struct {
 	size_t port_start;
 	size_t hops_min;
 	size_t hops_max;
@@ -50,10 +50,10 @@ struct options {
 	size_t probes_by_hops;
 	size_t probes_sim;
 	bool dns_lookup;
-};
+} Options;
 
-struct probe {
-	enum status status;
+typedef struct {
+	Status status;
 	uint16_t port;
 	struct timeval start;
 	struct timeval end;
@@ -61,14 +61,16 @@ struct probe {
 	uint8_t type;
 	uint8_t code;
 	double elapsed_time;
-};
+} Probe;
 
-struct trace_state {
+typedef struct {
 	in_port_t port_curr;
 	uint8_t hops_curr;
 	size_t probes_flight;
 	size_t end_idx;
+	size_t print_idx;
+	size_t check_idx;
 	bool reached;
-};
+} State;
 
-extern struct options opts;
+extern Options opts;

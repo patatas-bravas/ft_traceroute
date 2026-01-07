@@ -16,9 +16,9 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-struct options opts;
+Options opts;
 
-static enum error init_socket(int *fd)
+static ErrorType init_socket(int *fd)
 {
 	fd[UDP] = socket(AF_INET, SOCK_DGRAM, 0);
 	if (fd[UDP] == -1) {
@@ -28,6 +28,7 @@ static enum error init_socket(int *fd)
 
 	fd[ICMP] = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 	if (fd[ICMP] == -1) {
+		close(fd[UDP]);
 		if (errno == EPERM)
 			fprintf(stderr, "ft_traceroute: requires root privileges\n");
 		else
@@ -35,14 +36,15 @@ static enum error init_socket(int *fd)
 		return ERROR;
 	}
 
-	uint8_t buffer[512];
+	//Simply handle the case where we receive the previous pkt from the previous call (i love spamming ihih =D)
+	uint8_t buffer[1024];
 	while (recvfrom(fd[ICMP], buffer, sizeof(buffer), MSG_DONTWAIT, NULL, NULL) > 0) {
 	}
 
 	return SUCCESS;
 }
 
-static enum error send_datagram(struct sockaddr_in *dest_addr, struct probe *probes, struct trace_state *state, int *fd, uint8_t *buffer)
+static ErrorType send_datagram(struct sockaddr_in *dest_addr, Probe *probes, State *state, int *fd, uint8_t *buffer)
 {
 	size_t i = state->port_curr - opts.port_start;
 	while (state->probes_flight < opts.probes_sim && i <= state->end_idx) {
@@ -76,7 +78,7 @@ static inline double get_elapsed_time_ms(struct timeval start, struct timeval en
 	return (end.tv_sec - start.tv_sec) * 1000.0 + (end.tv_usec - start.tv_usec) / 1000.0;
 }
 
-static void handle_datagram(const uint8_t *buffer, struct probe *probes, struct in_addr recv_addr, struct trace_state *state)
+static void handle_datagram(const uint8_t *buffer, Probe *probes, struct in_addr recv_addr, State *state)
 {
 	struct iphdr *ip = (struct iphdr *)buffer;
 	struct icmphdr *icmp = (struct icmphdr *)(buffer + (ip->ihl * sizeof(int32_t)));
@@ -85,6 +87,8 @@ static void handle_datagram(const uint8_t *buffer, struct probe *probes, struct 
 
 	in_port_t port = ntohs(udp->dest);
 	size_t i = port - opts.port_start;
+	if (port < opts.port_start || port >= opts.port_start + TOTAL_PROBES)
+		return;
 	gettimeofday(&probes[i].end, NULL);
 	probes[i].addr = recv_addr;
 	probes[i].port = port;
@@ -103,36 +107,34 @@ static void handle_datagram(const uint8_t *buffer, struct probe *probes, struct 
 	}
 }
 
-static enum error print_probes(struct probe *probes, const struct trace_state *state)
+static ErrorType print_probes(Probe *probes, State *state)
 {
-	static size_t i = 0;
-
-	while (probes[i].status == PRINTABLE) {
-		const size_t hop_idx = i % opts.probes_by_hops;
+	while (probes[state->print_idx].status == PRINTABLE) {
+		const size_t hop_idx = state->print_idx % opts.probes_by_hops;
 		if (hop_idx == 0)
 			printf("%2ld ", opts.hops_min++);
-		if (probes[i].addr.s_addr == INADDR_ANY) {
+		if (probes[state->print_idx].addr.s_addr == INADDR_ANY) {
 			printf(" *");
 		} else {
-			if (hop_idx == 0 || probes[i].addr.s_addr != probes[i - 1].addr.s_addr) {
+			if (hop_idx == 0 || probes[state->print_idx].addr.s_addr != probes[state->print_idx - 1].addr.s_addr) {
 				if (opts.dns_lookup) {
-					char *ipname = inet_ntoa(probes[i].addr);
-					struct hostent *host = gethostbyaddr(&probes[i].addr, sizeof(probes[i].addr), AF_INET);
+					char *ipname = inet_ntoa(probes[state->print_idx].addr);
+					struct hostent *host = gethostbyaddr(&probes[state->print_idx].addr, sizeof(probes[state->print_idx].addr), AF_INET);
 					if (host)
 						printf(" %s (%s)", host->h_name, ipname);
 					else
 						printf(" %s (%s)", ipname, ipname);
 				} else
-					printf(" %s", inet_ntoa(probes[i].addr));
+					printf(" %s", inet_ntoa(probes[state->print_idx].addr));
 			}
-			printf("  %0.3lf ms", probes[i].elapsed_time);
-			switch (probes[i].code) {
+			printf("  %0.3lf ms", probes[state->print_idx].elapsed_time);
+			switch (probes[state->print_idx].code) {
 			case ICMP_HOST_UNREACH:
 				printf(" !H");
 				break;
-			// case ICMP_DEST_UNREACH:
-			// 	printf(" !D");
-			// 	break;
+			case ICMP_DEST_UNREACH:
+				printf(" !D");
+				break;
 			case ICMP_PROT_UNREACH:
 				printf(" !P");
 				break;
@@ -152,18 +154,19 @@ static enum error print_probes(struct probe *probes, const struct trace_state *s
 				break;
 			}
 		}
+
 		fflush(stdout);
 		if (hop_idx == opts.probes_by_hops - 1)
 			printf("\n");
 
-		if (i == state->end_idx)
+		if (state->print_idx == state->end_idx)
 			return SUCCESS;
-		i++;
+		state->print_idx++;
 	}
 	return IGNORE;
 }
 
-static enum error recv_datagram(struct probe *probes, struct trace_state *state, int *fd, uint8_t *buffer)
+static ErrorType recv_datagram(Probe *probes, State *state, int *fd, uint8_t *buffer)
 {
 	if (state->reached == false) {
 		fd_set fd_read;
@@ -196,7 +199,7 @@ static enum error recv_datagram(struct probe *probes, struct trace_state *state,
 	return SUCCESS;
 }
 
-static inline enum error dns_resolver(const char *hostname, struct sockaddr_in *addr)
+static inline ErrorType dns_resolver(const char *hostname, struct sockaddr_in *addr)
 {
 	struct addrinfo *result;
 	struct addrinfo hints = { 0 };
@@ -215,41 +218,38 @@ static inline enum error dns_resolver(const char *hostname, struct sockaddr_in *
 	return SUCCESS;
 }
 
-static enum error check_probes_timeout(struct probe *probes, struct trace_state *state)
+static ErrorType check_probes_timeout(Probe *probes, State *state)
 {
-	static size_t i = 0;
-
-	while (i <= state->end_idx) {
-		switch (probes[i].status) {
+	while (state->check_idx <= state->end_idx) {
+		switch (probes[state->check_idx].status) {
 		case UNSENT:
 			return IGNORE;
 		case PRINTABLE:
 			break;
 		case RECEIVED: {
-			probes[i].status = PRINTABLE;
+			probes[state->check_idx].status = PRINTABLE;
 			break;
 		}
 		case SENT: {
 			struct timeval time_now = { 0 };
 			gettimeofday(&time_now, NULL);
-			const double elapsed_time = get_elapsed_time_ms(probes[i].start, time_now);
+			const double elapsed_time = get_elapsed_time_ms(probes[state->check_idx].start, time_now);
 			if (elapsed_time >= MAX_TIMEOUT) {
-				probes[i].status = PRINTABLE;
+				probes[state->check_idx].status = PRINTABLE;
 				state->probes_flight--;
 				break;
 			}
 			return IGNORE;
 		}
 		}
-		i++;
+		state->check_idx++;
 	}
-
 	return SUCCESS;
 }
 
-static enum error ft_traceroute(struct sockaddr_in *addr_dest, struct trace_state *state, int *fd)
+static ErrorType ft_traceroute(struct sockaddr_in *addr_dest, State *state, int *fd)
 {
-	struct probe *probes = calloc(TOTAL_PROBES, sizeof(struct probe));
+	Probe *probes = calloc(TOTAL_PROBES, sizeof(Probe));
 	uint8_t *buffer = calloc(opts.dgram_size + HEADERS_SIZE, sizeof(uint8_t));
 
 	if (!probes || !buffer) {
@@ -259,8 +259,7 @@ static enum error ft_traceroute(struct sockaddr_in *addr_dest, struct trace_stat
 		return ERROR;
 	}
 
-	bool finished = false;
-	while (!finished) {
+	while (true) {
 		if (send_datagram(addr_dest, probes, state, fd, buffer) == ERROR)
 			break;
 
@@ -271,14 +270,14 @@ static enum error ft_traceroute(struct sockaddr_in *addr_dest, struct trace_stat
 			break;
 
 		if (print_probes(probes, state) == SUCCESS) {
-			finished = true;
 			break;
 		}
 	}
 
 	free(probes);
 	free(buffer);
-	return finished ? SUCCESS : ERROR;
+
+	return SUCCESS;
 }
 
 static inline void print_options()
@@ -294,7 +293,7 @@ static inline void print_options()
 			"port value for \"default\" method (incremented by each probe, default is 33434)\n");
 }
 
-enum error handle_options(int argc, char **argv, char **hostname)
+ErrorType handle_options(int argc, char **argv, char **hostname)
 {
 	opts.dgram_size = DGRAM_SIZE_DEFAULT;
 	opts.hops_min = HOPS_MIN_DEFAULT;
@@ -425,7 +424,7 @@ int main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 
-	struct trace_state state = { 0 };
+	State state = { 0 };
 	state.port_curr = opts.port_start;
 	state.hops_curr = opts.hops_min;
 	state.end_idx = opts.hops_max * opts.probes_by_hops - 1;
