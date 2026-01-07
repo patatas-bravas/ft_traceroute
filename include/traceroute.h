@@ -21,6 +21,7 @@
 #define OPT_MIN_PKT_SIZE 28
 #define OPT_MAX_PROBES_HOP 10
 
+#define MAX_TIMEOUT 200.0
 
 enum status {
 	UNSENT,
@@ -67,6 +68,7 @@ struct trace_state {
 	uint8_t hops_curr;
 	size_t probes_flight;
 	size_t end_idx;
+	bool reached;
 };
 
 extern struct options opts;
