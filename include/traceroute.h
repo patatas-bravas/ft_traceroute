@@ -14,21 +14,11 @@
 #define HOPS_MIN_DEFAULT 1
 #define HOPS_MAX_DEFAULT 30
 #define PROBES_BY_HOPS_DEFAULT 3
-#define PROBES_SIM_DEFAULT 16
 #define PORT_START_DEFAULT 33434
 
 #define OPT_MAX_PKT_SIZE 65000
 #define OPT_MIN_PKT_SIZE 28
 #define OPT_MAX_PROBES_HOP 10
-
-#define MAX_TIMEOUT 200.0
-
-typedef enum {
-	UNSENT,
-	SENT,
-	RECEIVED,
-	PRINTABLE,
-} Status;
 
 typedef enum {
 	UDP,
@@ -48,15 +38,11 @@ typedef struct {
 	size_t hops_max;
 	size_t dgram_size;
 	size_t probes_by_hops;
-	size_t probes_sim;
 	bool dns_lookup;
 } Options;
 
 typedef struct {
-	Status status;
-	uint16_t port;
 	struct timeval start;
-	struct timeval end;
 	struct in_addr addr;
 	uint8_t type;
 	uint8_t code;
@@ -66,11 +52,7 @@ typedef struct {
 typedef struct {
 	in_port_t port_curr;
 	uint8_t hops_curr;
-	size_t probes_flight;
-	size_t end_idx;
-	size_t print_idx;
-	size_t check_idx;
-	bool reached;
+	size_t end;
 } State;
 
 extern Options opts;
